@@ -1,0 +1,29 @@
+
+[package]
+name = "dotrix_editor"
+version = "0.2.0"
+authors = [
+  "Elias Kartashov <elias@lowenware.com>",
+  "Štěpán Wünsch <sw@lowenware.com>",
+  "Nikita Zemtsov <z-nik@ya.ru>",
+]
+edition = "2018"
+description = "Editor aplication for Dotrix game engine"
+license = "MIT"
+
+
+[[bin]]
+name = "editor"
+path = "src/main.rs"
+
+
+[dependencies.dotrix]
+version = "0.2"
+path = "../dotrix"
+
+[dependencies.rayon]
+version = "1.5"
+
+[dependencies.noise]
+version = "0.7"
+
