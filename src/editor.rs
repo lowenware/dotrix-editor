@@ -1,5 +1,5 @@
 use dotrix::{
-    assets::{ Id, Wires },
+    assets::{ Wires },
     components::{ Light, WireFrame },
     ecs::{ Mut, Const },
     egui::{
@@ -60,8 +60,8 @@ impl Editor {
             noise_persistence: 0.1,
             noise_scale: 256.0,
             noise_amplitude: 256.0,
-            show_toolbox: true,
-            show_info: false,
+            show_toolbox: false,
+            show_info: true,
             brush_x: 0.0,
             brush_y: 10.0,
             brush_z: 0.0,
@@ -175,7 +175,7 @@ pub fn ui(
                 .map(|v| format!("x: {:.4}, y: {:.4}, z: {:.4}", v.x, v.y, v.z));
 
             ui.label("Camera Position");
-            ui.label(vec.as_ref().map(|s| s.as_str()).unwrap_or("-"));
+            ui.label(vec.as_deref().unwrap_or("-"));
             ui.end_row();
 
             let vec = format!("x: {:.4}, y: {:.4}, z: {:.4}",
@@ -189,7 +189,7 @@ pub fn ui(
                 .map(|v| format!("x: {:.4}, y: {:.4}, z: {:.4}", v.x, v.y, v.z));
 
             ui.label("Mouse Ray");
-            ui.label(vec.as_ref().map(|s| s.as_str()).unwrap_or("-"));
+            ui.label(vec.as_deref().unwrap_or("-"));
             ui.end_row();
 
             ui.label("Generated in");
@@ -200,7 +200,7 @@ pub fn ui(
             let vec = editor.picked_block.as_ref()
                 .map(|v| format!("x: {:.4}, y: {:.4}, z: {:.4}", v.x, v.y, v.z));
             ui.label("Picked block");
-            ui.label(vec.as_ref().map(|s| s.as_str()).unwrap_or("None"));
+            ui.label(vec.as_deref().unwrap_or("None"));
             ui.end_row();
         });
     });
@@ -236,8 +236,8 @@ pub fn startup(
             (Action::Move, Button::Key(KeyCode::W)),
         ]);
 
-    let cursor = assets.store_as(Wires::cube([0.4; 3]), "wires_gray");
-    let cursor = assets.store_as(Wires::cube([0.8, 0.0, 0.0]), "wires_red");
+    assets.store_as(Wires::cube([0.4; 3]), "wires_gray");
+    assets.store_as(Wires::cube([0.8, 0.0, 0.0]), "wires_red");
     let cursor = assets.store(Wires::cube([0.0; 3]));
     let transform = Transform {
         translate: Vec3::new(0.0, 0.5, 0.0),
@@ -259,7 +259,7 @@ pub fn camera_control(
     mut camera: Mut<Camera>,
     input: Const<Input>,
     frame: Const<Frame>,
-    world: Const<World>,
+    // world: Const<World>,
 ) {
     let time_delta = frame.delta().as_secs_f32();
     let mouse_delta = input.mouse_delta();
@@ -298,12 +298,6 @@ pub fn camera_control(
 
         camera.target.x -= dx;
         camera.target.z -= dz;
-
-        let query = world.query::<(&mut WireFrame, &Cursor)>();
-        for (wire_frame, _) in query {
-            wire_frame.transform.translate.x = camera.target.x;
-            wire_frame.transform.translate.z = camera.target.z;
-        }
     }
 
     camera.set_view();
