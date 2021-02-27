@@ -112,7 +112,7 @@ pub fn binary_search(
         block.bound_min.z as f32,
     );
     let point = ray_direction * distance + ray_origin;
-    let value = map.value(block.cube_size, &(point - offset))
+    let value = map.value(block.voxel_size, &(point - offset))
         .expect("ray cast has to be inside of the block");
 
     if value.abs() < 0.001 {

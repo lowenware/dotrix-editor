@@ -1,6 +1,6 @@
 use dotrix::{
     assets::{ Wires },
-    components::{ Light, WireFrame },
+    components::{ SimpleLight, WireFrame },
     ecs::{ Mut, Const },
     egui::{
         Egui,
@@ -229,7 +229,9 @@ pub fn startup(
     assets.import("assets/terrain.png");
     renderer.add_overlay(Box::new(Egui::default()));
 
-    world.spawn(Some((Light::white([0.0, 500.0, 0.0]),)));
+    world.spawn(Some((SimpleLight{
+        position: Vec3::new(0.0, 500.0, 0.0), ..Default::default()
+    },)));
 
     input.mapper_mut::<Mapper<Action>>()
         .set(vec![
