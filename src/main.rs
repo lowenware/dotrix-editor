@@ -1,5 +1,6 @@
 mod brush;
 mod controls;
+mod cursor;
 mod editor;
 
 use dotrix::{
@@ -24,7 +25,8 @@ fn main() {
         .with_system(System::from(mouse_ray))
         .with_system(System::from(editor::ui))
         .with_system(System::from(terrain::spawn))
-        .with_system(System::from(brush::picker))
+        .with_system(System::from(cursor::track))
+        .with_system(System::from(brush::apply))
         .with_system(System::from(world_renderer).with(RunLevel::Render))
         .with_service(Assets::new())
         .with_service(terrain::service())
@@ -32,8 +34,8 @@ fn main() {
         .with_service(Editor::new())
         .with_service(Ray::default())
         .with_service(Camera {
-            distance: 400.0,
-            xz_angle: std::f32::consts::PI / 2.0,
+            distance: 600.0,
+            xz_angle: std::f32::consts::PI / 4.0,
             y_angle: std::f32::consts::PI / 2.0,
             target: Point3::new(0.0, 0.5, 0.0),
             ..Default::default()

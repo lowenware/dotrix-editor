@@ -1,10 +1,11 @@
 use dotrix::{
     assets::{ Wires },
-    components::{ SimpleLight, WireFrame },
+    components::{ SimpleLight },
     ecs::{ Mut, Const },
     egui::{
         Egui,
         CollapsingHeader,
+        DragValue,
         Grid,
         Label,
         TopPanel,
@@ -13,16 +14,51 @@ use dotrix::{
         Window
     },
     math::{ Vec3, Vec3i },
-    renderer::{ Transform, },
     input::{ Button, State as InputState, Mapper, KeyCode },
     services::{ Assets, Camera, Frame, Input, World, Ray, Renderer },
-    terrain::Terrain,
+    terrain::{ Terrain, Voxel, VoxelMap },
 };
 
-use crate::controls::Action;
+use crate::{
+    controls,
+    cursor,
+};
 
 use noise::{ Fbm, MultiFractal };
 use std::f32::consts::PI;
+
+pub struct VoxelPicker {
+    /// Terrain block containing the voxel
+    parent: Vec3i,
+    /// Voxel index in the Voxel Map
+    index: Vec3i,
+    /// Voxel density values
+    values: [f32; 8],
+}
+
+impl VoxelPicker {
+    pub fn new(parent: Vec3i, index: Vec3, map: &VoxelMap) -> Self {
+        let x = index.x as usize;
+        let y = index.y as usize;
+        let z = index.z as usize;
+        let index = Vec3i::new(x as i32, y as i32, z as i32);
+        let values = [
+            map.density[x][y][z],
+            map.density[x + 1][y][z],
+            map.density[x + 1][y][z + 1],
+            map.density[x][y][z + 1],
+            map.density[x][y + 1][z],
+            map.density[x + 1][y + 1][z],
+            map.density[x + 1][y + 1][z + 1],
+            map.density[x][y + 1][z + 1],
+        ];
+        Self {
+            parent,
+            index,
+            values,
+        }
+    }
+}
 
 pub struct Editor {
     pub sea_level: u8,
@@ -45,7 +81,9 @@ pub struct Editor {
     pub brush_changed: bool,
     pub apply_noise: bool,
     pub lod: usize,
-    pub picked_block: Option<Vec3i>,
+    pub cursor: Option<cursor::State>,
+    pub voxel_select: bool,
+    pub voxel: Option<VoxelPicker>,
 }
 
 impl Editor {
@@ -58,8 +96,8 @@ impl Editor {
             noise_frequency: 1.1,
             noise_lacunarity: 4.5,
             noise_persistence: 0.1,
-            noise_scale: 256.0,
-            noise_amplitude: 256.0,
+            noise_scale: 512.0,
+            noise_amplitude: 512.0,
             show_toolbox: false,
             show_info: true,
             brush_x: 0.0,
@@ -71,7 +109,9 @@ impl Editor {
             brush_changed: false,
             apply_noise: true,
             lod: 2,
-            picked_block: None,
+            cursor: None,
+            voxel_select: true,
+            voxel: None,
         }
     }
 
@@ -126,16 +166,41 @@ pub fn ui(
 
                     ui.add(Separator::new());
 
-                    ui.horizontal(|ui| {
-                        ui.add(Label::new("Brush:"));
-                        if ui.button("Add").clicked { editor.brush_add = true; }
-                        if ui.button("Sub").clicked { editor.brush_sub = true; }
-                    });
-
-                    ui.add(Slider::f32(&mut editor.brush_x, -64.0..=64.0).text("X"));
-                    ui.add(Slider::f32(&mut editor.brush_y, -64.0..=64.0).text("Y"));
-                    ui.add(Slider::f32(&mut editor.brush_z, -64.0..=64.0).text("Z"));
-                    ui.add(Slider::f32(&mut editor.brush_radius, 1.0..=16.0).text("Radius"));
+                    ui.add(Label::new("Brush:"));
+                    if let Some(voxel) = editor.voxel.as_mut() {
+                        ui.horizontal(|ui| {
+                            ui.add(DragValue::f32(&mut voxel.values[4]));
+                            ui.add(DragValue::f32(&mut voxel.values[5]));
+                            ui.add(DragValue::f32(&mut voxel.values[6]));
+                            ui.add(DragValue::f32(&mut voxel.values[7]));
+                        });
+                        ui.horizontal(|ui| {
+                            ui.add(DragValue::f32(&mut voxel.values[0]));
+                            ui.add(DragValue::f32(&mut voxel.values[1]));
+                            ui.add(DragValue::f32(&mut voxel.values[2]));
+                            ui.add(DragValue::f32(&mut voxel.values[3]));
+                        });
+                        if let Some(voxel) = editor.voxel.as_ref() {
+                            if ui.button("Apply").clicked {
+                                if let Some(node) = terrain.octree.load_mut(&voxel.parent) {
+                                    if let Some(map) = node.payload.as_mut() {
+                                        let x = voxel.index.x as usize;
+                                        let y = voxel.index.y as usize;
+                                        let z = voxel.index.z as usize;
+                                        map.density[x][y][z] = voxel.values[0];
+                                        map.density[x + 1][y][z] = voxel.values[1];
+                                        map.density[x + 1][y][z + 1] = voxel.values[2];
+                                        map.density[x][y][z + 1] = voxel.values[3];
+                                        map.density[x][y + 1][z] = voxel.values[4];
+                                        map.density[x + 1][y + 1][z] = voxel.values[5];
+                                        map.density[x + 1][y + 1][z + 1] = voxel.values[6];
+                                        map.density[x][y + 1][z + 1] = voxel.values[7];
+                                    }
+                                }
+                                terrain.changed = true;
+                            }
+                        }
+                    }
 
                     ui.add(Separator::new());
 
@@ -197,11 +262,24 @@ pub fn ui(
             ui.end_row();
 
 
-            let vec = editor.picked_block.as_ref()
-                .map(|v| format!("x: {:.4}, y: {:.4}, z: {:.4}", v.x, v.y, v.z));
-            ui.label("Picked block");
+            let vec = editor.cursor.as_ref()
+                .map(|v| format!("x: {:.4}, y: {:.4}, z: {:.4}",
+                        v.position.x, v.position.y, v.position.z));
+            ui.label("Cursor");
             ui.label(vec.as_deref().unwrap_or("None"));
             ui.end_row();
+
+            if let Some(voxel) = editor.voxel.as_ref() {
+                ui.label("Voxel Parent");
+                let vec = format!("x: {:.4}, y: {:.4}, z: {:.4}",
+                        voxel.parent.x, voxel.parent.y, voxel.parent.z);
+                ui.label(vec);
+                ui.end_row();
+                ui.label("Voxel Index");
+                let vec = format!("x: {:.4}, y: {:.4}, z: {:.4}",
+                        voxel.index.x, voxel.index.y, voxel.index.z);
+                ui.label(vec);
+            }
         });
     });
 
@@ -212,8 +290,6 @@ const ROTATE_SPEED: f32 = PI / 10.0;
 const ZOOM_SPEED: f32 = 10.0;
 const MOVE_SPEED: f32 = 64.0;
 
-pub struct Cursor(Vec3);
-
 pub fn startup(
     mut assets: Mut<Assets>,
     editor: Const<Editor>,
@@ -222,37 +298,18 @@ pub fn startup(
     mut terrain: Mut<Terrain>,
     mut world: Mut<World>,
 ) {
-
-    // editor.wired_pipeline = renderer.add_wire_frame_pipeline();
-
-    assets.import("assets/red.png");
     assets.import("assets/terrain.png");
     renderer.add_overlay(Box::new(Egui::default()));
 
     world.spawn(Some((SimpleLight{
-        position: Vec3::new(0.0, 500.0, 0.0), ..Default::default()
+        position: Vec3::new(0.0, 756.0, 0.0), ..Default::default()
     },)));
 
-    input.mapper_mut::<Mapper<Action>>()
-        .set(vec![
-            (Action::Move, Button::Key(KeyCode::W)),
-        ]);
+    controls::init(&mut input);
 
     assets.store_as(Wires::cube([0.4; 3]), "wires_gray");
-    assets.store_as(Wires::cube([0.8, 0.0, 0.0]), "wires_red");
-    let cursor = assets.store(Wires::cube([0.0; 3]));
-    let transform = Transform {
-        translate: Vec3::new(0.0, 0.5, 0.0),
-        scale: Vec3::new(0.05, 0.05, 0.05),
-        ..Default::default()
-    };
 
-    world.spawn(
-        Some((
-            WireFrame { wires: cursor, transform, ..Default::default() },
-            Cursor(Vec3::new(0.0, 0.0, 0.0))
-        ))
-    );
+    cursor::spawn(&mut assets, &mut world);
 
     terrain.populate(&editor.noise(), editor.noise_amplitude, editor.noise_scale);
 }
@@ -286,7 +343,7 @@ pub fn camera_control(
     }
 
     // move
-    let distance = if input.is_action_hold(Action::Move) {
+    let distance = if input.is_action_hold(controls::Action::Move) {
         MOVE_SPEED * frame.delta().as_secs_f32()
     } else {
         0.0
