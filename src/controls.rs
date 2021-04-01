@@ -13,7 +13,7 @@ pub enum Action {
 pub fn init(input: &mut Input) {
     input.mapper_mut::<Mapper<Action>>()
         .set(vec![
-            (Action::Brush, Button::MouseRight),
+            (Action::Brush, Button::MouseLeft),
             (Action::Move, Button::Key(KeyCode::W)),
         ]);
 }

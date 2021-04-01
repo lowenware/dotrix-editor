@@ -4,7 +4,7 @@ use dotrix::{
     components::{ Model, WireFrame },
     renderer::{ Transform },
     services::{ Assets, Ray, World },
-    terrain::{ Block, Terrain, VoxelMap },
+    terrain::{ Block, Density, Terrain, GRID_BLOCK_SIZE },
     math::{ Vec3, Vec3i },
 };
 
@@ -66,52 +66,41 @@ pub fn track(
         ];
 
         if let Some((distance_min, distance_max)) = ray.intersect_aligned_box(bounds) {
-            if let Some(node) = terrain.octree.load(&block.position) {
-                if let Some(map) = node.payload.as_ref() {
-                    /* println!(
-                        "Intersects {:?} - {:?}\n   in {:?} and {:?}\n  origin: {:?}",
-                        block.bound_min,
-                        block.bound_max,
-                        distance_min * ray.direction.unwrap() + ray.origin.unwrap(),
-                        distance_max * ray.direction.unwrap() + ray.origin.unwrap(),
-                        ray.origin.unwrap()
-                    ); */
+            let density = terrain.grid.load(block.bound_min, GRID_BLOCK_SIZE);
 
-                    if let Some((point, distance)) = binary_search(
-                        distance_min,
-                        distance_max,
-                        &ray,
-                        &block,
-                        map,
-                        0
-                    ) {
-                        if let Some((_position, saved_distance, _cursor_size)) = intersection {
-                            if distance >= saved_distance {
-                                continue;
-                            }
-                        }
-                        let (point, cursor_size) = if voxel_select {
-                            let voxel_size = block.voxel_size as f32;
-                            let voxel_half_size = voxel_size / 2.0;
-                            (
-                                Vec3::new(
-                                    (point.x / voxel_size).floor() * voxel_size + voxel_half_size,
-                                    (point.y / voxel_size).floor() * voxel_size + voxel_half_size,
-                                    (point.z / voxel_size).floor() * voxel_size + voxel_half_size,
-                                ),
-                                voxel_half_size
-                            )
-                        } else {
-                            (point, 32.0)
-                        };
-                        intersection = Some((point, distance, cursor_size));
-                        editor.cursor = Some(State {
-                            position: point,
-                            block: block.position,
-                            cursor_size
-                        });
+            if let Some((point, distance)) = binary_search(
+                distance_min,
+                distance_max,
+                &ray,
+                &block,
+                &density,
+                0
+            ) {
+                if let Some((_position, saved_distance, _cursor_size)) = intersection {
+                    if distance >= saved_distance {
+                        continue;
                     }
                 }
+                let (point, cursor_size) = if voxel_select {
+                    let voxel_size = block.voxel_size as f32;
+                    let voxel_half_size = voxel_size / 2.0;
+                    (
+                        Vec3::new(
+                            (point.x / voxel_size).floor() * voxel_size + voxel_half_size,
+                            (point.y / voxel_size).floor() * voxel_size + voxel_half_size,
+                            (point.z / voxel_size).floor() * voxel_size + voxel_half_size,
+                        ),
+                        voxel_half_size
+                    )
+                } else {
+                    (point, 32.0)
+                };
+                intersection = Some((point, distance, cursor_size));
+                editor.cursor = Some(State {
+                    position: point,
+                    block: block.position,
+                    cursor_size
+                });
             }
         }
     }
@@ -130,7 +119,7 @@ fn binary_search(
     distance_max: f32,
     ray: &Ray,
     block: &Block,
-    map: &VoxelMap,
+    density: &Density,
     count: usize,
 ) -> Option<(Vec3, f32)> {
     let ray_direction = ray.direction.unwrap();
@@ -142,7 +131,7 @@ fn binary_search(
         block.bound_min.z as f32,
     );
     let point = ray_direction * distance + ray_origin;
-    let value = map.value(block.voxel_size, &(point - offset))
+    let value = density.value(GRID_BLOCK_SIZE, block.voxel_size, &(point - offset))
         .expect("ray cast has to be inside of the block");
 
     if value.abs() < 0.001 {
@@ -153,11 +142,13 @@ fn binary_search(
         return None;
     }
 
-    if value < 0.0 {
-        binary_search(distance, distance_max, ray, block, map, count + 1)
+    let (distance_min, distance_max) = if value < 0.0 {
+        (distance, distance_max)
     } else {
-        binary_search(distance_min, distance, ray, block, map, count + 1)
-    }
+        (distance_min, distance)
+    };
+
+    binary_search(distance_min, distance_max, ray, block, density, count + 1)
 }
 
 

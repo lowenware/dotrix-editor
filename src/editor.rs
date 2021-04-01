@@ -14,9 +14,9 @@ use dotrix::{
         Window
     },
     math::{ Vec3, Vec3i },
-    input::{ Button, State as InputState, Mapper, KeyCode },
+    input::{ Button, State as InputState /*, Mapper, KeyCode */ },
     services::{ Assets, Camera, Frame, Input, World, Ray, Renderer },
-    terrain::{ Terrain, Voxel, VoxelMap },
+    terrain::{ Terrain, VoxelMap },
 };
 
 use crate::{
@@ -182,6 +182,7 @@ pub fn ui(
                         });
                         if let Some(voxel) = editor.voxel.as_ref() {
                             if ui.button("Apply").clicked {
+                                /*
                                 if let Some(node) = terrain.octree.load_mut(&voxel.parent) {
                                     if let Some(map) = node.payload.as_mut() {
                                         let x = voxel.index.x as usize;
@@ -197,6 +198,7 @@ pub fn ui(
                                         map.density[x][y + 1][z + 1] = voxel.values[7];
                                     }
                                 }
+                                */
                                 terrain.changed = true;
                             }
                         }

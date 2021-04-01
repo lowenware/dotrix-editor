@@ -1,10 +1,10 @@
 use dotrix::{
-    assets::{ Texture, Wires },
+//    assets::{ Texture, Wires },
     ecs::{ Const, Mut },
-    components::{ Model, WireFrame },
-    services::{ Assets, Input, Ray, World },
-    terrain::{ Block, Terrain, VoxelMap },
-    math::{ Vec3 },
+//    components::{ Model, WireFrame },
+    math::{ Point3, Vec3i, MetricSpace },
+    services::{ /* Assets,*/ Input, Ray, World },
+    terrain::{ Terrain },
 };
 
 use crate::{
@@ -12,37 +12,68 @@ use crate::{
     editor::{ Editor, VoxelPicker },
 };
 
-pub fn apply(mut editor: Mut<Editor>, input: Const<Input>, terrain: Mut<Terrain>) {
-    if !input.is_action_activated(Action::Brush) {
+pub struct Brush {
+    size: i32,
+}
+
+impl Default for Brush {
+    fn default() -> Self {
+        Self {
+            size: 1,
+        }
+    }
+}
+
+pub fn apply(
+    editor: Const<Editor>,
+    input: Const<Input>,
+    mut terrain: Mut<Terrain>,
+    world: Const<World>,
+) {
+    if !input.is_action_hold(Action::Brush) {
         return;
     }
 
-    let (cursor_position, block_position) = if let Some(cursor) = editor.cursor.as_ref() {
+    let (cursor_position, _block_position) = if let Some(cursor) = editor.cursor.as_ref() {
         (cursor.position, cursor.block)
     } else {
         return;
     };
 
-    if editor.voxel_select {
-        if let Some(node) = terrain.octree.load(&block_position) {
-            let half_block_size = (node.size / 2) as f32;
-            let block_base = Vec3::new(
-                block_position.x as f32 - half_block_size,
-                block_position.y as f32 - half_block_size,
-                block_position.z as f32 - half_block_size,
-            );
-            let voxel_half_size = half_block_size / 16.0;
-            let voxel_base = Vec3::new(
-                cursor_position.x - voxel_half_size as f32,
-                cursor_position.y - voxel_half_size as f32,
-                cursor_position.z - voxel_half_size as f32,
-            );
-            let voxel_offset = (voxel_base - block_base) / voxel_half_size / 2.0;
-            editor.voxel = Some(
-                VoxelPicker::new(block_position, voxel_offset, node.payload.as_ref().unwrap())
-            );
+    let brush = Brush::default();
+    let base = Vec3i::new(
+        (cursor_position.x - (brush.size) as f32).ceil() as i32,
+        (cursor_position.y - (brush.size) as f32).ceil() as i32,
+        (cursor_position.z - (brush.size) as f32).ceil() as i32,
+    );
+    let size = brush.size as usize * 2 + 1;
+    let mut density = terrain.grid.load(base, size)
+        .values()
+        .expect("Should have some values");
+
+    let size_sq = size * size;
+    for x in 0..size {
+        let xx = x * size_sq;
+        for y in 0..size {
+            let xy = xx + size * y;
+            for z in 0..size {
+                let xyz = xy + z;
+                let distance_sq = Point3::new(
+                    base.x as f32 + (x) as f32,
+                    base.y as f32 + (y) as f32,
+                    base.z as f32 + (z) as f32
+                ).distance2(
+                    Point3::new(cursor_position.x, cursor_position.y, cursor_position.z)
+                );
+
+                if distance_sq <= size_sq as f32 {
+                    density[xyz] += 4 - 4 * distance_sq as i8 / size_sq as i8;
+                }
+            }
         }
     }
 
-    println!("Brush: !");
+    terrain.grid.save(base, size, density);
+    terrain.changed = true;
+
 }
