@@ -1,5 +1,5 @@
 # Dotrix Editor
-Editor application for [Dotrix](https://dotrix.rs) game engine
+Editor application for [Dotrix](http://dotrix.rs) game engine
 
 [![LICENSE](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT)
 [![LICENSE](https://img.shields.io/badge/license-apache-blue.svg)](LICENSE-APACHE)
